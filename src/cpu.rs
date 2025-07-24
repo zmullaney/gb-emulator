@@ -19,11 +19,17 @@ impl MemoryBus {
 
 impl CPU {
     fn step(&mut self) {
-        let mut instruction_byte = self.bus.read_byte(self.pc);
-        let next_pc = if let Some(instruction) = Instruction::from_byte(instruction_byte) {
+        let mut instruction_byte = self.bus.read_byte( self.pc);
+        let prefixed = instruction_byte == 0xCB;
+        if prefixed { 
+            instruction_byte = self.bus.read_byte(self.pc.wrapping_add(1));
+        }
+        let next_pc = 
+            if let Some(instruction) = Instruction::from_byte(instruction_byte, prefixed) {
             self.execute(instruction)
-        } else {
-            panic!("Unknown instruction found for: 0x{:x}", instruction_byte);
+        }   else {
+            let description = format!("0x{}{:x}", if prefixed { "CB" } else { "" }, instruction_byte);
+            panic!("Unkown instruction found for: {}", description)
         };
         self.pc = next_pc;
     }
@@ -64,9 +70,14 @@ impl CPU {
                         let value = self.registers.a;
                         let _new_value = self.ADD(value);
                     }
-                    // TODO: add immediate value support
+                    ArithmeticTarget::N8 => {
+                        self.pc = self.pc.wrapping_add(1);
+                        let value = self.bus.read_byte(self.pc);
+                        let _new_value = self.ADD(value);
+                    }
                     _ => panic!("Incompatible ArithmeticTarget for ADD"),
                 }
+                self.pc.wrapping_add(1)
             }
             Instruction::ADDHL(target) => {
                 match target {
@@ -85,13 +96,10 @@ impl CPU {
                     // TODO: ADDHL for SP (Stack Pointer)
                     _ => panic!("Incompatible ArithmeticTarget for ADDHL"),
                 }
+                self.pc.wrapping_add(1)
             }
             Instruction::ADC(target) => {
                 match target {
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let _new_value = self.ADC(value);
-                    }
                     ArithmeticTarget::B => {
                         let value = self.registers.b;
                         let _new_value = self.ADC(value);
@@ -116,16 +124,25 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.ADC(value);
                     }
-                    // TODO: address in HL and imm value support
+                    ArithmeticTarget::HL => {
+                        let value = self.bus.read_byte(self.registers.get_hl());
+                        let _new_value = self.ADC(value);
+                    }
+                    ArithmeticTarget::A => {
+                        let value = self.registers.a;
+                        let _new_value = self.ADC(value);
+                    }
+                    ArithmeticTarget::N8 => {
+                        self.pc = self.pc.wrapping_add(1);
+                        let value = self.bus.read_byte(self.pc);
+                        let _new_value = self.ADC(value);
+                    }
                     _ => panic!("Incompatible ArithmeticTarget for ADC"),
                 }
+                self.pc.wrapping_add(1)
             }
             Instruction::SUB(target) => {
                 match target {
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let _new_value = self.SUB(value);
-                    }
                     ArithmeticTarget::B => {
                         let value = self.registers.b;
                         let _new_value = self.SUB(value);
@@ -150,16 +167,25 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.SUB(value);
                     }
-                    // TODO: address in HL and imm value support
+                    ArithmeticTarget::HL => {
+                        let value = self.bus.read_byte(self.registers.get_hl());
+                        let _new_value = self.SUB(value);
+                    }
+                    ArithmeticTarget::A => {
+                        let value = self.registers.a;
+                        let _new_value = self.SUB(value);
+                    }
+                    ArithmeticTarget::N8 => {
+                        self.pc = self.pc.wrapping_add(1);
+                        let value = self.bus.read_byte(self.pc);
+                        let _new_value = self.SUB(value);
+                    }
                     _ => panic!("Incompatible ArithmeticTarget for SUB"),
                 }
+                self.pc.wrapping_add(1)
             }
             Instruction::SBC(target) => {
                 match target {
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let _new_value = self.SBC(value);
-                    }
                     ArithmeticTarget::B => {
                         let value = self.registers.b;
                         let _new_value = self.SBC(value);
@@ -184,16 +210,25 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.SBC(value);
                     }
-                    // TODO: address in HL and imm value support
+                    ArithmeticTarget::HL => {
+                        let value = self.bus.read_byte(self.registers.get_hl());
+                        let _new_value = self.SBC(value);
+                    }
+                    ArithmeticTarget::A => {
+                        let value = self.registers.a;
+                        let _new_value = self.SBC(value);
+                    }
+                    ArithmeticTarget::N8 => {
+                        self.pc = self.pc.wrapping_add(1);
+                        let value = self.bus.read_byte(self.pc);
+                        let _new_value = self.SBC(value);
+                    }
                     _ => panic!("Incompatible ArithmeticTarget for SBC"),
                 }
+                self.pc.wrapping_add(1)
             }
             Instruction::AND(target) => {
                 match target {
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let _new_value = self.AND(value);
-                    }
                     ArithmeticTarget::B => {
                         let value = self.registers.b;
                         let _new_value = self.AND(value);
@@ -218,16 +253,25 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.AND(value);
                     }
-                    // TODO: address in HL and imm value support
+                    ArithmeticTarget::HL => {
+                        let value = self.bus.read_byte(self.registers.get_hl());
+                        let _new_value = self.AND(value);
+                    }
+                    ArithmeticTarget::A => {
+                        let value = self.registers.a;
+                        let _new_value = self.AND(value);
+                    }
+                    ArithmeticTarget::N8 => {
+                        self.pc = self.pc.wrapping_add(1);
+                        let value = self.bus.read_byte(self.pc);
+                        let _new_value = self.AND(value);
+                    }
                     _ => panic!("Incompatible ArithmeticTarget for AND"),
                 }
+                self.pc.wrapping_add(1)
             }
             Instruction::OR(target) => {
                 match target {
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let _new_value = self.OR(value);
-                    }
                     ArithmeticTarget::B => {
                         let value = self.registers.b;
                         let _new_value = self.OR(value);
@@ -252,16 +296,25 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.OR(value);
                     }
-                    // TODO: address in HL and imm value support
+                    ArithmeticTarget::HL => {
+                        let value = self.bus.read_byte(self.registers.get_hl());
+                        let _new_value = self.OR(value);
+                    }
+                    ArithmeticTarget::A => {
+                        let value = self.registers.a;
+                        let _new_value = self.OR(value);
+                    }
+                    ArithmeticTarget::N8 => {
+                        self.pc = self.pc.wrapping_add(1);
+                        let value = self.bus.read_byte(self.pc);
+                        let _new_value = self.OR(value);
+                    }
                     _ => panic!("Incompatible ArithmeticTarget for OR"),
                 }
+                self.pc.wrapping_add(1)
             }
             Instruction::XOR(target) => {
                 match target {
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let _new_value = self.XOR(value);
-                    }
                     ArithmeticTarget::B => {
                         let value = self.registers.b;
                         let _new_value = self.XOR(value);
@@ -286,16 +339,25 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.XOR(value);
                     }
-                    // TODO: address in HL and imm value support
+                    ArithmeticTarget::HL => {
+                        let value = self.bus.read_byte(self.registers.get_hl());
+                        let _new_value = self.XOR(value);
+                    }
+                    ArithmeticTarget::A => {
+                        let value = self.registers.a;
+                        let _new_value = self.XOR(value);
+                    }
+                    ArithmeticTarget::N8 => {
+                        self.pc = self.pc.wrapping_add(1);
+                        let value = self.bus.read_byte(self.pc);
+                        let _new_value = self.XOR(value);
+                    }
                     _ => panic!("Incompatible ArithmeticTarget for XOR"),
                 }
+                self.pc.wrapping_add(1)
             }
             Instruction::CP(target) => {
                 match target {
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        self.CP(value);
-                    }
                     ArithmeticTarget::B => {
                         let value = self.registers.b;
                         self.CP(value);
@@ -320,15 +382,25 @@ impl CPU {
                         let value = self.registers.l;
                         self.CP(value);
                     }
-                    // TODO: address in HL and imm value support
+                    ArithmeticTarget::HL => {
+                        let value = self.bus.read_byte(self.registers.get_hl());
+                        let _new_value = self.CP(value);
+                    }
+                    ArithmeticTarget::A => {
+                        let value = self.registers.a;
+                        let _new_value = self.CP(value);
+                    }
+                    ArithmeticTarget::N8 => {
+                        self.pc = self.pc.wrapping_add(1);
+                        let value = self.bus.read_byte(self.pc);
+                        let _new_value = self.CP(value);
+                    }
                     _ => panic!("Incompatible ArithmeticTarget for CP"),
                 }
+                self.pc.wrapping_add(1)
             }
             Instruction::INC(target) => {
                 match target {
-                    ArithmeticTarget::A => {
-                        self.registers.a = self.INC(self.registers.a);
-                    }
                     ArithmeticTarget::B => {
                         self.registers.b = self.INC(self.registers.b);
                     }
@@ -347,15 +419,16 @@ impl CPU {
                     ArithmeticTarget::L => {
                         self.registers.l = self.INC(self.registers.l);
                     }
+                    ArithmeticTarget::A => {
+                        self.registers.a = self.INC(self.registers.a);
+                    }
                     // TODO: HL as pointer operand (no immediate value support)
                     _ => panic!("Incompatible ArithmeticTarget for INC"),
                 }
+                self.pc.wrapping_add(1)
             }
             Instruction::DEC(target) => {
                 match target {
-                    ArithmeticTarget::A => {
-                        self.registers.a = self.DEC(self.registers.a);
-                    }
                     ArithmeticTarget::B => {
                         self.registers.b = self.DEC(self.registers.b);
                     }
@@ -374,22 +447,45 @@ impl CPU {
                     ArithmeticTarget::L => {
                         self.registers.l = self.DEC(self.registers.l);
                     }
+                    ArithmeticTarget::A => {
+                        self.registers.a = self.DEC(self.registers.a);
+                    }
                     // TODO: HL as pointer operand (no immediate value support)
                     _ => panic!("Incompatible ArithmeticTarget for DEC"),
                 }
+                self.pc.wrapping_add(1)
             }
-            Instruction::CCF() => self.CCF(),
-            Instruction::SCF() => self.SCF(),
-            Instruction::RRA() => self.RRA(),
-            Instruction::RLA() => self.RLA(),
-            Instruction::RRCA() => self.RRCA(),
-            Instruction::RLCA() => self.RLCA(),
-            Instruction::CPL() => self.CPL(),
+            Instruction::CCF() => {
+                self.CCF();
+                self.pc.wrapping_add(1)
+            }
+            Instruction::SCF() => {
+                self.SCF();
+                self.pc.wrapping_add(1)
+            }
+            Instruction::RRA() => {
+                self.RRA();
+                self.pc.wrapping_add(1)
+            }
+            Instruction::RLA() => {
+                self.RLA();
+                self.pc.wrapping_add(1)
+            }
+            Instruction::RRCA() => {
+                self.RRCA();
+                self.pc.wrapping_add(1)
+            }
+            Instruction::RLCA() => {
+                self.RLCA();
+                self.pc.wrapping_add(1)
+            }
+            Instruction::CPL() => {
+                self.CPL();
+                self.pc.wrapping_add(1)
+            }
             // TODO: support for more instructions
-            _ => panic!("Unknown instruction (exited from cpu.rs)"),
+            _ => panic!("Unknown instruction (exited execute)"),
         }
-        // return next_pc
-        self.pc.wrapping_add(1)
     }
 
     fn ADD(&mut self, value: u8) -> u8 {
@@ -488,7 +584,6 @@ impl CPU {
         self.registers.f.carry = did_overflow;
     }
     // increment input register
-    #[allow(non_snake_case)]
     fn INC(&mut self, value: u8) -> u8 {
         let new_value = value.wrapping_add(1);
         self.registers.f.zero = new_value == 0;

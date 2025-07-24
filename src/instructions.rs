@@ -1,5 +1,5 @@
 pub enum ArithmeticTarget {
-    A, B, C, D, E, H, L, BC, DE, HL,
+    A, B, C, D, E, H, L, BC, DE, HL, N8,
 }
 
 pub enum Instruction {
@@ -24,7 +24,15 @@ pub enum Instruction {
 }
 
 impl Instruction {
-    pub fn from_byte(byte: u8) -> Option<Instruction> {
+    pub fn from_byte(byte: u8, prefixed: bool) -> Option<Instruction> {
+        if prefixed {
+            Instruction::from_byte_prefixed(byte)
+        } else {
+            Instruction::from_byte_standard(byte)
+        }
+    }
+
+    fn from_byte_standard(byte: u8) -> Option<Instruction> {
         match byte {
             // ADD
             0x80 => Some(Instruction::ADD(ArithmeticTarget::B)),
@@ -35,6 +43,7 @@ impl Instruction {
             0x85 => Some(Instruction::ADD(ArithmeticTarget::L)),
             0x86 => Some(Instruction::ADD(ArithmeticTarget::HL)),
             0x87 => Some(Instruction::ADD(ArithmeticTarget::A)),
+            0xC6 => Some(Instruction::ADD(ArithmeticTarget::N8)),
             // ADC
             0x88 => Some(Instruction::ADC(ArithmeticTarget::B)),
             0x89 => Some(Instruction::ADC(ArithmeticTarget::C)),
@@ -44,6 +53,7 @@ impl Instruction {
             0x8D => Some(Instruction::ADC(ArithmeticTarget::L)),
             0x8E => Some(Instruction::ADC(ArithmeticTarget::HL)),
             0x8F => Some(Instruction::ADC(ArithmeticTarget::A)),
+            0xCE => Some(Instruction::ADC(ArithmeticTarget::N8)),
             // SUB
             0x90 => Some(Instruction::SUB(ArithmeticTarget::B)),
             0x91 => Some(Instruction::SUB(ArithmeticTarget::C)),
@@ -53,6 +63,7 @@ impl Instruction {
             0x95 => Some(Instruction::SUB(ArithmeticTarget::L)),
             0x96 => Some(Instruction::SUB(ArithmeticTarget::HL)),
             0x97 => Some(Instruction::SUB(ArithmeticTarget::A)),
+            0xD6 => Some(Instruction::SUB(ArithmeticTarget::N8)),
             // SBC
             0x98 => Some(Instruction::SBC(ArithmeticTarget::B)),
             0x99 => Some(Instruction::SBC(ArithmeticTarget::C)),
@@ -62,6 +73,7 @@ impl Instruction {
             0x9D => Some(Instruction::SBC(ArithmeticTarget::L)),
             0x9E => Some(Instruction::SBC(ArithmeticTarget::HL)),
             0x9F => Some(Instruction::SBC(ArithmeticTarget::A)),
+            0xDE => Some(Instruction::SBC(ArithmeticTarget::N8)),
             // AND
             0xA0 => Some(Instruction::AND(ArithmeticTarget::B)),
             0xA1 => Some(Instruction::AND(ArithmeticTarget::C)),
@@ -71,6 +83,7 @@ impl Instruction {
             0xA5 => Some(Instruction::AND(ArithmeticTarget::L)),
             0xA6 => Some(Instruction::AND(ArithmeticTarget::HL)),
             0xA7 => Some(Instruction::AND(ArithmeticTarget::A)),
+            0xE6 => Some(Instruction::AND(ArithmeticTarget::N8)),
             // XOR
             0xA8 => Some(Instruction::XOR(ArithmeticTarget::B)),
             0xA9 => Some(Instruction::XOR(ArithmeticTarget::C)),
@@ -80,6 +93,7 @@ impl Instruction {
             0xAD => Some(Instruction::XOR(ArithmeticTarget::L)),
             0xAE => Some(Instruction::XOR(ArithmeticTarget::HL)),
             0xAF => Some(Instruction::XOR(ArithmeticTarget::A)),
+            0xEE => Some(Instruction::XOR(ArithmeticTarget::N8)),
             // OR
             0xB0 => Some(Instruction::OR(ArithmeticTarget::B)),
             0xB1 => Some(Instruction::OR(ArithmeticTarget::C)),
@@ -89,6 +103,7 @@ impl Instruction {
             0xB5 => Some(Instruction::OR(ArithmeticTarget::L)),
             0xB6 => Some(Instruction::OR(ArithmeticTarget::HL)),
             0xB7 => Some(Instruction::OR(ArithmeticTarget::A)),
+            0xF6 => Some(Instruction::OR(ArithmeticTarget::N8)),
             // CP
             0xB8 => Some(Instruction::CP(ArithmeticTarget::B)),
             0xB9 => Some(Instruction::CP(ArithmeticTarget::C)),
@@ -98,8 +113,16 @@ impl Instruction {
             0xBD => Some(Instruction::CP(ArithmeticTarget::L)),
             0xBE => Some(Instruction::CP(ArithmeticTarget::HL)),
             0xBF => Some(Instruction::CP(ArithmeticTarget::A)),
+            0xFE => Some(Instruction::CP(ArithmeticTarget::N8)),
             
-            _ => panic!("Unknown instruction (exited from instructions.rs)"),
+            _ => panic!("Unknown instruction (exited from_byte_standard)"),
+        }
+    }
+
+    fn from_byte_prefixed(byte: u8) -> Option<Instruction> {
+        match byte {
+
+            _ => panic!("Unknown instruction (exited from_byte_prefixed)"),
         }
     }
 }
