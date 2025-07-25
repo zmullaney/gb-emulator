@@ -1,11 +1,5 @@
 use crate::registers::Registers;
-use crate::instructions::{Instruction, ArithmeticTarget, JumpTest};
-
-struct CPU {
-    registers: Registers,
-    pc: u16,
-    bus: MemoryBus,
-}
+use crate::instructions::*;
 
 struct MemoryBus {
     memory: [u8; 0xFFFF]
@@ -16,11 +10,27 @@ impl MemoryBus {
         self.memory[address as usize]
     }
     // pass in address to first byte of u16
-    fn read_u16(&mut self, address: u16) -> u16 {
+    fn read_word(&mut self, address: u16) -> u16 {
         let least_significant_byte = self.read_byte(address) as u16;
         let most_significant_byte = self.read_byte(address.wrapping_add(1)) as u16;
         (most_significant_byte << 8) | least_significant_byte
     }
+    fn write_byte(&mut self, address: u16, value: u8) {
+        self.memory[address as usize] = value;
+    }
+    fn write_word(&mut self, address: u16, value: u16) {
+        let least_significant_byte = (value & 0xFF) as u8;
+        let most_significant_byte = ((value & 0xFF00) >> 8) as u8;
+        self.write_byte(address, least_significant_byte);
+        self.write_byte(address.wrapping_add(1), most_significant_byte);
+    }
+}
+
+struct CPU {
+    registers: Registers,
+    pc: u16,
+    sp: u16,
+    bus: MemoryBus,
 }
 
 impl CPU {
@@ -38,6 +48,16 @@ impl CPU {
             panic!("Unkown instruction found for: {}", description)
         };
         self.pc = next_pc;
+    }
+    // increments pc and returns byte at new pc
+    fn get_immediate_byte(&mut self) -> u8 {
+        self.pc = self.pc.wrapping_add(1);
+        self.bus.read_byte(self.pc)
+    }
+    fn get_immediate_word(&mut self) -> u16 {
+        let value = self.bus.read_word(self.pc.wrapping_add(1));
+        self.pc = self.pc.wrapping_add(2);
+        value
     }
 
     fn execute(&mut self, instruction: Instruction) -> u16 {
@@ -66,6 +86,63 @@ impl CPU {
                 // jump straight to address in HL
                 self.registers.get_hl()
             }
+            Instruction::LD(load_type) => {
+                match load_type {
+                    LoadType::Byte(target, source) => {
+                        let source_value = 
+                        match source {
+                            LoadSource::A => self.registers.a,
+                            LoadSource::B => self.registers.b,
+                            LoadSource::C => self.registers.c,
+                            LoadSource::D => self.registers.d,
+                            LoadSource::E => self.registers.e,
+                            LoadSource::H => self.registers.h,
+                            LoadSource::L => self.registers.l,
+                            LoadSource::BC => self.bus.read_byte(self.registers.get_bc()),
+                            LoadSource::DE => self.bus.read_byte(self.registers.get_de()),
+                            LoadSource::HL => self.bus.read_byte(self.registers.get_hl()),
+                            LoadSource::N8 => self.get_immediate_byte(),
+                            _ => panic!("Invalid LD LoadType::Byte source"),
+                        };
+                        match target {
+                            LoadTarget::A => self.registers.a = source_value,
+                            LoadTarget::B => self.registers.b = source_value,
+                            LoadTarget::C => self.registers.c = source_value,
+                            LoadTarget::D => self.registers.d = source_value,
+                            LoadTarget::E => self.registers.e = source_value,
+                            LoadTarget::H => self.registers.h = source_value,
+                            LoadTarget::L => self.registers.l = source_value,
+                            LoadTarget::BC => self.bus.write_byte(self.registers.get_bc(), source_value),
+                            LoadTarget::DE => self.bus.write_byte(self.registers.get_de(), source_value),
+                            LoadTarget::HL => self.bus.write_byte(self.registers.get_hl(), source_value),
+                            _ => panic!("Invalid LD LoadType::Byte target"),
+                        }
+                        self.pc.wrapping_add(1)
+                    }
+                    LoadType::Word(target, source) => {
+                        let source_value = 
+                        match source {
+                            LoadSource::N16 => self.get_immediate_word(),
+                            LoadSource::SP => self.sp,
+                            _ => panic!("Invalid LD LoadType::Word source"),
+                        };
+                        match target {
+                            LoadTarget::BC => self.registers.set_bc(source_value),
+                            LoadTarget::DE => self.registers.set_de(source_value),
+                            LoadTarget::HL => self.registers.set_hl(source_value),
+                            LoadTarget::SP => self.sp = source_value,
+                            LoadTarget::A16 => {
+                                let address = self.get_immediate_word();
+                                self.bus.write_word(address, source_value)
+                            }
+                            _ => panic!("Invalid LD LoadType::Word target"),
+                        }
+                        // increments from immediate values / addresses should be handled in get_immediate_word
+                        self.pc.wrapping_add(1)
+                    }
+                    // _ => panic!("Invalid LD LoadType"),
+                }
+            }
             Instruction::ADD(target) => {
                 match target {
                     ArithmeticTarget::B => {
@@ -92,7 +169,7 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.ADD(value);
                     }
-                    ArithmeticTarget::HLI => {
+                    ArithmeticTarget::HL => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.ADD(value);
                     }
@@ -101,14 +178,14 @@ impl CPU {
                         let _new_value = self.ADD(value);
                     }
                     ArithmeticTarget::N8 => {
-                        self.pc = self.pc.wrapping_add(1);
-                        let value = self.bus.read_byte(self.pc);
+                        let value = self.get_immediate_byte();
                         let _new_value = self.ADD(value);
                     }
                     _ => panic!("Incompatible ArithmeticTarget for ADD"),
                 }
                 self.pc.wrapping_add(1)
             }
+
             Instruction::ADDHL(target) => {
                 match target {
                     ArithmeticTarget::BC => {
@@ -154,7 +231,7 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.ADC(value);
                     }
-                    ArithmeticTarget::HLI => {
+                    ArithmeticTarget::HL => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.ADC(value);
                     }
@@ -163,8 +240,7 @@ impl CPU {
                         let _new_value = self.ADC(value);
                     }
                     ArithmeticTarget::N8 => {
-                        self.pc = self.pc.wrapping_add(1);
-                        let value = self.bus.read_byte(self.pc);
+                        let value = self.get_immediate_byte();
                         let _new_value = self.ADC(value);
                     }
                     _ => panic!("Incompatible ArithmeticTarget for ADC"),
@@ -197,7 +273,7 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.SUB(value);
                     }
-                    ArithmeticTarget::HLI => {
+                    ArithmeticTarget::HL => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.SUB(value);
                     }
@@ -206,8 +282,7 @@ impl CPU {
                         let _new_value = self.SUB(value);
                     }
                     ArithmeticTarget::N8 => {
-                        self.pc = self.pc.wrapping_add(1);
-                        let value = self.bus.read_byte(self.pc);
+                        let value = self.get_immediate_byte();
                         let _new_value = self.SUB(value);
                     }
                     _ => panic!("Incompatible ArithmeticTarget for SUB"),
@@ -240,7 +315,7 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.SBC(value);
                     }
-                    ArithmeticTarget::HLI => {
+                    ArithmeticTarget::HL => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.SBC(value);
                     }
@@ -249,8 +324,7 @@ impl CPU {
                         let _new_value = self.SBC(value);
                     }
                     ArithmeticTarget::N8 => {
-                        self.pc = self.pc.wrapping_add(1);
-                        let value = self.bus.read_byte(self.pc);
+                        let value = self.get_immediate_byte();
                         let _new_value = self.SBC(value);
                     }
                     _ => panic!("Incompatible ArithmeticTarget for SBC"),
@@ -283,7 +357,7 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.AND(value);
                     }
-                    ArithmeticTarget::HLI => {
+                    ArithmeticTarget::HL => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.AND(value);
                     }
@@ -292,8 +366,7 @@ impl CPU {
                         let _new_value = self.AND(value);
                     }
                     ArithmeticTarget::N8 => {
-                        self.pc = self.pc.wrapping_add(1);
-                        let value = self.bus.read_byte(self.pc);
+                        let value = self.get_immediate_byte();
                         let _new_value = self.AND(value);
                     }
                     _ => panic!("Incompatible ArithmeticTarget for AND"),
@@ -326,7 +399,7 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.OR(value);
                     }
-                    ArithmeticTarget::HLI => {
+                    ArithmeticTarget::HL => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.OR(value);
                     }
@@ -335,8 +408,7 @@ impl CPU {
                         let _new_value = self.OR(value);
                     }
                     ArithmeticTarget::N8 => {
-                        self.pc = self.pc.wrapping_add(1);
-                        let value = self.bus.read_byte(self.pc);
+                        let value = self.get_immediate_byte();
                         let _new_value = self.OR(value);
                     }
                     _ => panic!("Incompatible ArithmeticTarget for OR"),
@@ -369,7 +441,7 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.XOR(value);
                     }
-                    ArithmeticTarget::HLI => {
+                    ArithmeticTarget::HL => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.XOR(value);
                     }
@@ -378,8 +450,7 @@ impl CPU {
                         let _new_value = self.XOR(value);
                     }
                     ArithmeticTarget::N8 => {
-                        self.pc = self.pc.wrapping_add(1);
-                        let value = self.bus.read_byte(self.pc);
+                        let value = self.get_immediate_byte();
                         let _new_value = self.XOR(value);
                     }
                     _ => panic!("Incompatible ArithmeticTarget for XOR"),
@@ -412,7 +483,7 @@ impl CPU {
                         let value = self.registers.l;
                         self.CP(value);
                     }
-                    ArithmeticTarget::HLI => {
+                    ArithmeticTarget::HL => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.CP(value);
                     }
@@ -421,8 +492,7 @@ impl CPU {
                         let _new_value = self.CP(value);
                     }
                     ArithmeticTarget::N8 => {
-                        self.pc = self.pc.wrapping_add(1);
-                        let value = self.bus.read_byte(self.pc);
+                        let value = self.get_immediate_byte();
                         let _new_value = self.CP(value);
                     }
                     _ => panic!("Incompatible ArithmeticTarget for CP"),
@@ -514,13 +584,13 @@ impl CPU {
                 self.pc.wrapping_add(1)
             }
             // TODO: support for more instructions
-            _ => panic!("Unknown instruction (exited execute)"),
+            // _ => panic!("Unknown instruction (exited execute)"),
         }
     }
 
     // jump to 16 bit address stored after instruction
     fn JP(&mut self, should_jump: bool) -> u16 {
-        if should_jump { self.bus.read_u16(self.pc.wrapping_add(1)) }
+        if should_jump { self.bus.read_word(self.pc.wrapping_add(1)) }
         else { self.pc.wrapping_add(3) }
     }
     // jump based on i8 offset stored after instruction
