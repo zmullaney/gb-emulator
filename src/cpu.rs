@@ -91,53 +91,67 @@ impl CPU {
                     LoadType::Byte(target, source) => {
                         let source_value = 
                         match source {
-                            LoadSource::A => self.registers.a,
-                            LoadSource::B => self.registers.b,
-                            LoadSource::C => self.registers.c,
-                            LoadSource::D => self.registers.d,
-                            LoadSource::E => self.registers.e,
-                            LoadSource::H => self.registers.h,
-                            LoadSource::L => self.registers.l,
-                            LoadSource::BC => self.bus.read_byte(self.registers.get_bc()),
-                            LoadSource::DE => self.bus.read_byte(self.registers.get_de()),
-                            LoadSource::HL => self.bus.read_byte(self.registers.get_hl()),
-                            LoadSource::N8 => self.get_immediate_byte(),
-                            _ => panic!("Invalid LD LoadType::Byte source"),
+                            LoadByteSource::A => self.registers.a,
+                            LoadByteSource::B => self.registers.b,
+                            LoadByteSource::C => self.registers.c,
+                            LoadByteSource::D => self.registers.d,
+                            LoadByteSource::E => self.registers.e,
+                            LoadByteSource::H => self.registers.h,
+                            LoadByteSource::L => self.registers.l,
+                            LoadByteSource::BC => self.bus.read_byte(self.registers.get_bc()),
+                            LoadByteSource::DE => self.bus.read_byte(self.registers.get_de()),
+                            LoadByteSource::HL => self.bus.read_byte(self.registers.get_hl()),
+                            LoadByteSource::N8 => self.get_immediate_byte(),
+                            // _ => panic!("Invalid LD LoadType::Byte source"),
                         };
                         match target {
-                            LoadTarget::A => self.registers.a = source_value,
-                            LoadTarget::B => self.registers.b = source_value,
-                            LoadTarget::C => self.registers.c = source_value,
-                            LoadTarget::D => self.registers.d = source_value,
-                            LoadTarget::E => self.registers.e = source_value,
-                            LoadTarget::H => self.registers.h = source_value,
-                            LoadTarget::L => self.registers.l = source_value,
-                            LoadTarget::BC => self.bus.write_byte(self.registers.get_bc(), source_value),
-                            LoadTarget::DE => self.bus.write_byte(self.registers.get_de(), source_value),
-                            LoadTarget::HL => self.bus.write_byte(self.registers.get_hl(), source_value),
-                            _ => panic!("Invalid LD LoadType::Byte target"),
+                            LoadByteTarget::A => self.registers.a = source_value,
+                            LoadByteTarget::B => self.registers.b = source_value,
+                            LoadByteTarget::C => self.registers.c = source_value,
+                            LoadByteTarget::D => self.registers.d = source_value,
+                            LoadByteTarget::E => self.registers.e = source_value,
+                            LoadByteTarget::H => self.registers.h = source_value,
+                            LoadByteTarget::L => self.registers.l = source_value,
+                            LoadByteTarget::BC => self.bus.write_byte(self.registers.get_bc(), source_value),
+                            LoadByteTarget::DE => self.bus.write_byte(self.registers.get_de(), source_value),
+                            LoadByteTarget::HL => self.bus.write_byte(self.registers.get_hl(), source_value),
+                            // _ => panic!("Invalid LD LoadType::Byte target"),
                         }
                         self.pc.wrapping_add(1)
                     }
                     LoadType::Word(target, source) => {
                         let source_value = 
                         match source {
-                            LoadSource::N16 => self.get_immediate_word(),
-                            LoadSource::SP => self.sp,
-                            _ => panic!("Invalid LD LoadType::Word source"),
+                            LoadWordSource::N16 => self.get_immediate_word(),
+                            LoadWordSource::SP => self.sp,
+                            // _ => panic!("Invalid LD LoadType::Word source"),
                         };
                         match target {
-                            LoadTarget::BC => self.registers.set_bc(source_value),
-                            LoadTarget::DE => self.registers.set_de(source_value),
-                            LoadTarget::HL => self.registers.set_hl(source_value),
-                            LoadTarget::SP => self.sp = source_value,
-                            LoadTarget::A16 => {
+                            LoadWordTarget::BC => self.registers.set_bc(source_value),
+                            LoadWordTarget::DE => self.registers.set_de(source_value),
+                            LoadWordTarget::HL => self.registers.set_hl(source_value),
+                            LoadWordTarget::SP => self.sp = source_value,
+                            LoadWordTarget::A16 => {
                                 let address = self.get_immediate_word();
                                 self.bus.write_word(address, source_value)
                             }
-                            _ => panic!("Invalid LD LoadType::Word target"),
+                            // _ => panic!("Invalid LD LoadType::Word target"),
                         }
                         // increments from immediate values / addresses should be handled in get_immediate_word
+                        self.pc.wrapping_add(1)
+                    }
+                    LoadType::AddressIncDec(target, source, mode) => {
+                        let hl = self.registers.get_hl();
+                        match (target, source) {
+                            (LoadIncDecTarget::A, LoadIncDecSource::HL) => self.registers.a = self.bus.read_byte(hl),
+                            (LoadIncDecTarget::HL, LoadIncDecSource::A) => self.bus.write_byte(hl, self.registers.a),
+                            _ => panic!("Invalid AddressIncDec inputs"),
+                        };
+                        let new_hl = match mode {
+                            AddressMode::Inc => hl.wrapping_add(1),
+                            AddressMode::Dec => hl.wrapping_sub(1),
+                        };
+                        self.registers.set_hl(new_hl);
                         self.pc.wrapping_add(1)
                     }
                     // _ => panic!("Invalid LD LoadType"),

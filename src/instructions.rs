@@ -5,15 +5,31 @@ pub enum JumpTest {
     Carry,
     Always,
 }
-pub enum LoadTarget {
-    A, B, C, D, E, H, L, BC, DE, HL, SP, A16
+pub enum LoadByteTarget {
+    A, B, C, D, E, H, L, BC, DE, HL,
 }
-pub enum LoadSource {
-    A, B, C, D, E, H, L, BC, DE, HL, SP, N8, N16
+pub enum LoadByteSource {
+    A, B, C, D, E, H, L, BC, DE, HL, N8,
+}
+pub enum LoadWordTarget {
+    BC, DE, HL, SP, A16,
+}
+pub enum LoadWordSource {
+    N16, SP,
+}
+pub enum LoadIncDecTarget {
+    HL, A,
+}
+pub enum LoadIncDecSource {
+    HL, A,
+}
+pub enum AddressMode {
+    Inc, Dec
 }
 pub enum LoadType {
-    Byte(LoadTarget, LoadSource),
-    Word(LoadTarget, LoadSource),
+    Byte(LoadByteTarget, LoadByteSource),
+    Word(LoadWordTarget, LoadWordSource),
+    AddressIncDec(LoadIncDecTarget, LoadIncDecSource, AddressMode),
 }
 pub enum ArithmeticTarget {
     A, B, C, D, E, H, L, BC, DE, HL, N8,
