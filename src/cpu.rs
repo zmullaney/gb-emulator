@@ -1,5 +1,5 @@
 use crate::registers::Registers;
-use crate::instructions::{Instruction, ArithmeticTarget};
+use crate::instructions::{Instruction, ArithmeticTarget, JumpTest};
 
 struct CPU {
     registers: Registers,
@@ -14,6 +14,12 @@ struct MemoryBus {
 impl MemoryBus {
     fn read_byte(&mut self, address: u16) -> u8 {
         self.memory[address as usize]
+    }
+    // pass in address to first byte of u16
+    fn read_u16(&mut self, address: u16) -> u16 {
+        let least_significant_byte = self.read_byte(address) as u16;
+        let most_significant_byte = self.read_byte(address.wrapping_add(1)) as u16;
+        (most_significant_byte << 8) | least_significant_byte
     }
 }
 
@@ -36,6 +42,30 @@ impl CPU {
 
     fn execute(&mut self, instruction: Instruction) -> u16 {
         match instruction {
+            Instruction::JP(test) => {
+                let jump_condition = match test {
+                    JumpTest::NotZero => !self.registers.f.zero,
+                    JumpTest::Zero => self.registers.f.zero,
+                    JumpTest::NotCarry => !self.registers.f.carry,
+                    JumpTest::Carry => self.registers.f.carry,
+                    JumpTest::Always => true,
+                };
+                self.JP(jump_condition)
+            }
+            Instruction::JR(test) => {
+                let jump_condition = match test {
+                    JumpTest::NotZero => !self.registers.f.zero,
+                    JumpTest::Zero => self.registers.f.zero,
+                    JumpTest::NotCarry => !self.registers.f.carry,
+                    JumpTest::Carry => self.registers.f.carry,
+                    JumpTest::Always => true,
+                };
+                self.JR(jump_condition)
+            }
+            Instruction::JPHL() => {
+                // jump straight to address in HL
+                self.registers.get_hl()
+            }
             Instruction::ADD(target) => {
                 match target {
                     ArithmeticTarget::B => {
@@ -62,7 +92,7 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.ADD(value);
                     }
-                    ArithmeticTarget::HL => {
+                    ArithmeticTarget::HLI => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.ADD(value);
                     }
@@ -124,7 +154,7 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.ADC(value);
                     }
-                    ArithmeticTarget::HL => {
+                    ArithmeticTarget::HLI => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.ADC(value);
                     }
@@ -167,7 +197,7 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.SUB(value);
                     }
-                    ArithmeticTarget::HL => {
+                    ArithmeticTarget::HLI => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.SUB(value);
                     }
@@ -210,7 +240,7 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.SBC(value);
                     }
-                    ArithmeticTarget::HL => {
+                    ArithmeticTarget::HLI => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.SBC(value);
                     }
@@ -253,7 +283,7 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.AND(value);
                     }
-                    ArithmeticTarget::HL => {
+                    ArithmeticTarget::HLI => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.AND(value);
                     }
@@ -296,7 +326,7 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.OR(value);
                     }
-                    ArithmeticTarget::HL => {
+                    ArithmeticTarget::HLI => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.OR(value);
                     }
@@ -339,7 +369,7 @@ impl CPU {
                         let value = self.registers.l;
                         let _new_value = self.XOR(value);
                     }
-                    ArithmeticTarget::HL => {
+                    ArithmeticTarget::HLI => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.XOR(value);
                     }
@@ -382,7 +412,7 @@ impl CPU {
                         let value = self.registers.l;
                         self.CP(value);
                     }
-                    ArithmeticTarget::HL => {
+                    ArithmeticTarget::HLI => {
                         let value = self.bus.read_byte(self.registers.get_hl());
                         let _new_value = self.CP(value);
                     }
@@ -488,6 +518,20 @@ impl CPU {
         }
     }
 
+    // jump to 16 bit address stored after instruction
+    fn JP(&mut self, should_jump: bool) -> u16 {
+        if should_jump { self.bus.read_u16(self.pc.wrapping_add(1)) }
+        else { self.pc.wrapping_add(3) }
+    }
+    // jump based on i8 offset stored after instruction
+    fn JR(&mut self, should_jump: bool) -> u16 {
+        if should_jump {
+            let offset = self.bus.read_byte(self.pc.wrapping_add(1)) as i8;
+            // compiler demands i16 for wrapping_add_signed here
+            self.pc.wrapping_add_signed(offset as i16)
+        }
+        else { self.pc.wrapping_add(2) }
+    }
     fn ADD(&mut self, value: u8) -> u8 {
         let (new_value, did_overflow) = self.registers.a.overflowing_add(value);
         self.registers.f.zero = new_value == 0;
@@ -619,9 +663,9 @@ impl CPU {
     fn RRA(&mut self) {
         let old_a = self.registers.a;
         let carry_in = if self.registers.f.carry { 0x80 } else { 0 };
-        // A shifts right then carry_in becomes MSB of A
+        // A shifts right then carry_in becomes msb of A
         let new_value = (old_a >> 1) | carry_in;
-        // set new carry to LSB of A
+        // set new carry to lsb of A
         self.registers.f.carry = old_a & 0x1 != 0;
         // don't touch zero flag
         self.registers.f.subtract = false;
@@ -632,32 +676,32 @@ impl CPU {
     fn RLA(&mut self) {
         let old_a = self.registers.a;
         let carry_in = if self.registers.f.carry { 0x01 } else { 0 };
-        // A shifts left then carry_in becomes LSB of A
+        // A shifts left then carry_in becomes lsb of A
         let new_value = (old_a << 1) | carry_in;
-        // set new carry to MSB of A
+        // set new carry to msb of A
         self.registers.f.carry = old_a & 0x80 != 0;
         // don't touch zero flag
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
         self.registers.a = new_value;
     }
-    // rotate A reg right without carry (carry set to old LSB)
+    // rotate A reg right without carry (carry set to old lsb)
     fn RRCA(&mut self) {
         let old_a = self.registers.a;
-        let old_LSB = if old_a & 0x01 != 0 { 0x80 } else { 0 };
-        let new_value = (old_a >> 1) | old_LSB;
-        self.registers.f.carry = old_LSB != 0;
+        let old_lsb = if old_a & 0x01 != 0 { 0x80 } else { 0 };
+        let new_value = (old_a >> 1) | old_lsb;
+        self.registers.f.carry = old_lsb != 0;
         // don't touch zero flag
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
         self.registers.a = new_value;
     }
-    // rotate A left without carry (carry set to old MSB)
+    // rotate A left without carry (carry set to old msb)
     fn RLCA(&mut self) {
         let old_a = self.registers.a;
-        let old_MSB = if old_a & 0x80 != 0 { 0x01 } else { 0 };
-        let new_value = (old_a << 1) | old_MSB;
-        self.registers.f.carry = old_MSB != 0;
+        let old_msb = if old_a & 0x80 != 0 { 0x01 } else { 0 };
+        let new_value = (old_a << 1) | old_msb;
+        self.registers.f.carry = old_msb != 0;
         // don't touch zero flag
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
