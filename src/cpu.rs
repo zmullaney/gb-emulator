@@ -157,6 +157,26 @@ impl CPU {
                     // _ => panic!("Invalid LD LoadType"),
                 }
             }
+            Instruction::PUSH(target) => {
+                let value = match target {
+                    StackTarget::BC => self.registers.get_bc(),
+                    StackTarget::DE => self.registers.get_de(),
+                    StackTarget::HL => self.registers.get_hl(),
+                    StackTarget::AF => self.registers.get_af(),
+                };
+                self.PUSH(value);
+                self.pc.wrapping_add(1)
+            }
+            Instruction::POP(target) => {
+                let value = self.POP();
+                match target {
+                    StackTarget::BC => self.registers.set_bc(value),
+                    StackTarget::DE => self.registers.set_de(value),
+                    StackTarget::HL => self.registers.set_hl(value),
+                    StackTarget::AF => self.registers.set_af(value),
+                }
+                self.pc.wrapping_add(1)
+            }
             Instruction::ADD(target) => {
                 match target {
                     ArithmeticTarget::B => {
@@ -214,7 +234,10 @@ impl CPU {
                         let value = self.registers.get_hl();
                         let _new_value = self.ADDHL(value);
                     }
-                    // TODO: ADDHL for SP (Stack Pointer)
+                    ArithmeticTarget::SP => {
+                        let value = self.sp;
+                        let _new_value = self.ADDHL(value);
+                    }
                     _ => panic!("Incompatible ArithmeticTarget for ADDHL"),
                 }
                 self.pc.wrapping_add(1)
@@ -533,10 +556,15 @@ impl CPU {
                     ArithmeticTarget::L => {
                         self.registers.l = self.INC(self.registers.l);
                     }
+                    ArithmeticTarget::HL => {
+                        let hl = self.registers.get_hl();
+                        let value = self.bus.read_byte(hl);
+                        let new_value = self.INC(value);
+                        self.bus.write_byte(hl, new_value);
+                    }
                     ArithmeticTarget::A => {
                         self.registers.a = self.INC(self.registers.a);
                     }
-                    // TODO: HL as pointer operand (no immediate value support)
                     _ => panic!("Incompatible ArithmeticTarget for INC"),
                 }
                 self.pc.wrapping_add(1)
@@ -561,11 +589,37 @@ impl CPU {
                     ArithmeticTarget::L => {
                         self.registers.l = self.DEC(self.registers.l);
                     }
+                    ArithmeticTarget::HL => {
+                        let hl = self.registers.get_hl();
+                        let value = self.bus.read_byte(hl);
+                        let new_value = self.DEC(value);
+                        self.bus.write_byte(hl, new_value);
+                    }
                     ArithmeticTarget::A => {
                         self.registers.a = self.DEC(self.registers.a);
                     }
-                    // TODO: HL as pointer operand (no immediate value support)
                     _ => panic!("Incompatible ArithmeticTarget for DEC"),
+                }
+                self.pc.wrapping_add(1)
+            }
+            // Same as INC and DEC but for 16 bit regs and doesn't touch any flags
+            Instruction::INC16(target) => {
+                match target {
+                    ArithmeticTarget::BC => self.registers.set_bc(self.registers.get_bc().wrapping_add(1)),
+                    ArithmeticTarget::DE => self.registers.set_de(self.registers.get_de().wrapping_add(1)),
+                    ArithmeticTarget::HL => self.registers.set_hl(self.registers.get_hl().wrapping_add(1)),
+                    ArithmeticTarget::SP => self.sp = self.sp.wrapping_add(1),
+                    _ => panic!("Incompatible ArithmeticTarget for INC16"),
+                }
+                self.pc.wrapping_add(1)
+            }
+            Instruction::DEC16(target) => {
+                match target {
+                    ArithmeticTarget::BC => self.registers.set_bc(self.registers.get_bc().wrapping_sub(1)),
+                    ArithmeticTarget::DE => self.registers.set_de(self.registers.get_de().wrapping_sub(1)),
+                    ArithmeticTarget::HL => self.registers.set_hl(self.registers.get_hl().wrapping_sub(1)),
+                    ArithmeticTarget::SP => self.sp = self.sp.wrapping_sub(1),
+                    _ => panic!("Incompatible ArithmeticTarget for DEC16"),
                 }
                 self.pc.wrapping_add(1)
             }
@@ -615,6 +669,17 @@ impl CPU {
             self.pc.wrapping_add_signed(offset as i16)
         }
         else { self.pc.wrapping_add(2) }
+    }
+    // decrement stack pointer and push value from 16 bit reg
+    fn PUSH(&mut self, value: u16) {
+        self.sp = self.sp.wrapping_sub(2);
+        self.bus.write_word(self.sp, value);
+    }
+    // return u16 at current stack pointer (to be stored in 16 bit reg) and increment it
+    fn POP(&mut self) -> u16 {
+        let result = self.bus.read_word(self.sp);
+        self.sp = self.sp.wrapping_add(2);
+        result
     }
     fn ADD(&mut self, value: u8) -> u8 {
         let (new_value, did_overflow) = self.registers.a.overflowing_add(value);
