@@ -623,33 +623,147 @@ impl CPU {
                 }
                 self.pc.wrapping_add(1)
             }
-            Instruction::CCF() => {
-                self.CCF();
-                self.pc.wrapping_add(1)
-            }
-            Instruction::SCF() => {
-                self.SCF();
-                self.pc.wrapping_add(1)
-            }
-            Instruction::RRA() => {
-                self.RRA();
-                self.pc.wrapping_add(1)
-            }
-            Instruction::RLA() => {
-                self.RLA();
+            Instruction::RLCA() => {
+                self.RLCA();
                 self.pc.wrapping_add(1)
             }
             Instruction::RRCA() => {
                 self.RRCA();
                 self.pc.wrapping_add(1)
             }
-            Instruction::RLCA() => {
-                self.RLCA();
+            Instruction::RLA() => {
+                self.RLA();
+                self.pc.wrapping_add(1)
+            }
+            Instruction::RRA() => {
+                self.RRA();
                 self.pc.wrapping_add(1)
             }
             Instruction::CPL() => {
                 self.CPL();
                 self.pc.wrapping_add(1)
+            }
+            Instruction::SCF() => {
+                self.SCF();
+                self.pc.wrapping_add(1)
+            }
+            Instruction::CCF() => {
+                self.CCF();
+                self.pc.wrapping_add(1)
+            }
+
+            // PREFIXED INSTRUCTIONS
+            Instruction::BIT(bit, target) => {
+                match target {
+                    ArithmeticTarget::B => self.BIT(bit, self.registers.b),
+                    ArithmeticTarget::C => self.BIT(bit, self.registers.c),
+                    ArithmeticTarget::D => self.BIT(bit, self.registers.d),
+                    ArithmeticTarget::E => self.BIT(bit, self.registers.e),
+                    ArithmeticTarget::H => self.BIT(bit, self.registers.h),
+                    ArithmeticTarget::L => self.BIT(bit, self.registers.l),
+                    ArithmeticTarget::HL => {
+                        let hl = self.registers.get_hl();
+                        let r = self.bus.read_byte(hl);
+                        self.BIT(bit, r);
+                    }
+                    ArithmeticTarget::A => self.BIT(bit, self.registers.a),
+                    _ => panic!("Incompatible ArithmeticTarget for BIT"),
+                }
+                self.pc.wrapping_add(2)
+            }
+            Instruction::RES(bit, target) => {
+                match target {
+                    ArithmeticTarget::B => {
+                        let r = self.registers.b;
+                        let new_r = self.RES(bit, r);
+                        self.registers.b = new_r;
+                    }
+                    ArithmeticTarget::C => {
+                        let r = self.registers.c;
+                        let new_r = self.RES(bit, r);
+                        self.registers.c = new_r;
+                    }
+                    ArithmeticTarget::D => {
+                        let r = self.registers.d;
+                        let new_r = self.RES(bit, r);
+                        self.registers.d = new_r;
+                    }
+                    ArithmeticTarget::E => {
+                        let r = self.registers.e;
+                        let new_r = self.RES(bit, r);
+                        self.registers.e = new_r;
+                    }
+                    ArithmeticTarget::H => {
+                        let r = self.registers.h;
+                        let new_r = self.RES(bit, r);
+                        self.registers.h = new_r;
+                    }
+                    ArithmeticTarget::L => {
+                        let r = self.registers.l;
+                        let new_r = self.RES(bit, r);
+                        self.registers.l = new_r;
+                    }
+                    ArithmeticTarget::HL => {
+                        let hl = self.registers.get_hl();
+                        let r = self.bus.read_byte(hl);
+                        let new_r = self.RES(bit, r);
+                        self.bus.write_byte(hl, new_r);
+                    }
+                    ArithmeticTarget::A => {
+                        let r = self.registers.a;
+                        let new_r = self.RES(bit, r);
+                        self.registers.a = new_r;
+                    }
+                    _ => panic!("Incompatible ArithmeticTarget for RES"),
+                }
+                self.pc.wrapping_add(2)
+            }
+            Instruction::SET(bit, target) => {
+                match target {
+                    ArithmeticTarget::B => {
+                        let r = self.registers.b;
+                        let new_r = self.SET(bit, r);
+                        self.registers.b = new_r;
+                    }
+                    ArithmeticTarget::C => {
+                        let r = self.registers.c;
+                        let new_r = self.SET(bit, r);
+                        self.registers.c = new_r;
+                    }
+                    ArithmeticTarget::D => {
+                        let r = self.registers.d;
+                        let new_r = self.SET(bit, r);
+                        self.registers.d = new_r;
+                    }
+                    ArithmeticTarget::E => {
+                        let r = self.registers.e;
+                        let new_r = self.SET(bit, r);
+                        self.registers.e = new_r;
+                    }
+                    ArithmeticTarget::H => {
+                        let r = self.registers.h;
+                        let new_r = self.SET(bit, r);
+                        self.registers.h = new_r;
+                    }
+                    ArithmeticTarget::L => {
+                        let r = self.registers.l;
+                        let new_r = self.SET(bit, r);
+                        self.registers.l = new_r;
+                    }
+                    ArithmeticTarget::HL => {
+                        let hl = self.registers.get_hl();
+                        let r = self.bus.read_byte(hl);
+                        let new_r = self.SET(bit, r);
+                        self.bus.write_byte(hl, new_r);
+                    }
+                    ArithmeticTarget::A => {
+                        let r = self.registers.a;
+                        let new_r = self.SET(bit, r);
+                        self.registers.a = new_r;
+                    }
+                    _ => panic!("Incompatible ArithmeticTarget for SET"),
+                }
+                self.pc.wrapping_add(2)
             }
             // TODO: support for more instructions
             // _ => panic!("Unknown instruction (exited execute)"),
@@ -794,28 +908,23 @@ impl CPU {
         // don't touch carry flag in INC or DEC
         new_value
     }
-    // toggle carry bit
-    fn CCF(&mut self) {
-        self.registers.f.carry = !self.registers.f.carry;
-        // don't touch zero flag
-        self.registers.f.subtract = false;
-        self.registers.f.half_carry = false;
-    }
-    // set carry bit to true
-    fn SCF(&mut self) {
-        self.registers.f.carry = true;
-        // don't touch zero flag
-        self.registers.f.subtract = false;
-        self.registers.f.half_carry = false;
-    }
-    // rotate A register right using carry flag
-    fn RRA(&mut self) {
+    // rotate A left without carry (carry set to old msb)
+    fn RLCA(&mut self) {
         let old_a = self.registers.a;
-        let carry_in = if self.registers.f.carry { 0x80 } else { 0 };
-        // A shifts right then carry_in becomes msb of A
-        let new_value = (old_a >> 1) | carry_in;
-        // set new carry to lsb of A
-        self.registers.f.carry = old_a & 0x1 != 0;
+        let old_msb = if old_a & 0x80 != 0 { 0x01 } else { 0 };
+        let new_value = (old_a << 1) | old_msb;
+        self.registers.f.carry = old_msb != 0;
+        // don't touch zero flag
+        self.registers.f.subtract = false;
+        self.registers.f.half_carry = false;
+        self.registers.a = new_value;
+    }
+    // rotate A reg right without carry (carry set to old lsb)
+    fn RRCA(&mut self) {
+        let old_a = self.registers.a;
+        let old_lsb = if old_a & 0x01 != 0 { 0x80 } else { 0 };
+        let new_value = (old_a >> 1) | old_lsb;
+        self.registers.f.carry = old_lsb != 0;
         // don't touch zero flag
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
@@ -834,23 +943,14 @@ impl CPU {
         self.registers.f.half_carry = false;
         self.registers.a = new_value;
     }
-    // rotate A reg right without carry (carry set to old lsb)
-    fn RRCA(&mut self) {
+    // rotate A register right using carry flag
+    fn RRA(&mut self) {
         let old_a = self.registers.a;
-        let old_lsb = if old_a & 0x01 != 0 { 0x80 } else { 0 };
-        let new_value = (old_a >> 1) | old_lsb;
-        self.registers.f.carry = old_lsb != 0;
-        // don't touch zero flag
-        self.registers.f.subtract = false;
-        self.registers.f.half_carry = false;
-        self.registers.a = new_value;
-    }
-    // rotate A left without carry (carry set to old msb)
-    fn RLCA(&mut self) {
-        let old_a = self.registers.a;
-        let old_msb = if old_a & 0x80 != 0 { 0x01 } else { 0 };
-        let new_value = (old_a << 1) | old_msb;
-        self.registers.f.carry = old_msb != 0;
+        let carry_in = if self.registers.f.carry { 0x80 } else { 0 };
+        // A shifts right then carry_in becomes msb of A
+        let new_value = (old_a >> 1) | carry_in;
+        // set new carry to lsb of A
+        self.registers.f.carry = old_a & 0x1 != 0;
         // don't touch zero flag
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
@@ -863,5 +963,39 @@ impl CPU {
         self.registers.f.subtract = true;
         self.registers.f.half_carry = true;
         self.registers.a = new_a;
+    }
+    // set carry bit to true
+    fn SCF(&mut self) {
+        self.registers.f.carry = true;
+        // don't touch zero flag
+        self.registers.f.subtract = false;
+        self.registers.f.half_carry = false;
+    }
+    // toggle carry bit
+    fn CCF(&mut self) {
+        self.registers.f.carry = !self.registers.f.carry;
+        // don't touch zero flag
+        self.registers.f.subtract = false;
+        self.registers.f.half_carry = false;
+    }
+    // test whether bit in question is set
+    fn BIT(&mut self, bit: u8, r: u8) {
+        let bit_set = r & (1 << bit) != 0;
+        self.registers.f.zero = !bit_set;
+        self.registers.f.subtract = false;
+        self.registers.f.half_carry = true;
+        // don't touch carry flag
+    }
+    // reset bit in question to 0
+    fn RES(&mut self, bit: u8, r: u8) -> u8 {
+        let new_r = r & !(1 << bit);
+        // don't touch any flags
+        new_r
+    }
+    // set bit in question to 1
+    fn SET(&mut self, bit: u8, r: u8) -> u8 {
+        let new_r = r | (1 << bit);
+        // don't touch any flags
+        new_r
     }
 }
