@@ -54,12 +54,44 @@ impl CPU {
         self.pc = self.pc.wrapping_add(1);
         self.bus.read_byte(self.pc)
     }
+    // gets immediate word then increments pc by 2
     fn get_immediate_word(&mut self) -> u16 {
         let value = self.bus.read_word(self.pc.wrapping_add(1));
         self.pc = self.pc.wrapping_add(2);
         value
     }
-    fn read_prefixed_register(&mut self, target: PrefixedTarget) -> u8 {
+    fn read_arithmetic_byte_target(&mut self, target: ArithmeticByteTarget) -> u8 {
+        let value = match target {
+            ArithmeticByteTarget::B => self.registers.b,
+            ArithmeticByteTarget::C => self.registers.c,
+            ArithmeticByteTarget::D => self.registers.d,
+            ArithmeticByteTarget::E => self.registers.e,
+            ArithmeticByteTarget::H => self.registers.h,
+            ArithmeticByteTarget::L => self.registers.l,
+            ArithmeticByteTarget::HL => self.bus.read_byte(self.registers.get_hl()),
+            ArithmeticByteTarget::A => self.registers.a,
+            ArithmeticByteTarget::N8 => self.get_immediate_byte(),
+        };
+        value
+    }
+    fn read_arithmetic_word_target(&mut self, target: ArithmeticWordTarget) -> u16 {
+        let value = match target {
+            ArithmeticWordTarget::BC => self.registers.get_bc(),
+            ArithmeticWordTarget::DE => self.registers.get_de(),
+            ArithmeticWordTarget::HL => self.registers.get_hl(),
+            ArithmeticWordTarget::SP => self.sp,
+        };
+        value
+    }
+    fn write_arithmetic_word_target(&mut self, target: ArithmeticWordTarget, value: u16) {
+        match target {
+            ArithmeticWordTarget::BC => self.registers.set_bc(value),
+            ArithmeticWordTarget::DE => self.registers.set_de(value),
+            ArithmeticWordTarget::HL => self.registers.set_hl(value),
+            ArithmeticWordTarget::SP => self.sp = value,
+        }
+    }
+    fn read_prefixed_target(&mut self, target: PrefixedTarget) -> u8 {
         let r = match target {
             PrefixedTarget::B => self.registers.b,
             PrefixedTarget::C => self.registers.c,
@@ -72,7 +104,7 @@ impl CPU {
         };
         r
     }
-    fn write_prefixed_register(&mut self, target: PrefixedTarget, new_r: u8) {
+    fn write_prefixed_target(&mut self, target: PrefixedTarget, new_r: u8) {
         match target {
             PrefixedTarget::B => self.registers.b = new_r,
             PrefixedTarget::C => self.registers.c = new_r,
@@ -182,16 +214,6 @@ impl CPU {
                     // _ => panic!("Invalid LD LoadType"),
                 }
             }
-            Instruction::PUSH(target) => {
-                let value = match target {
-                    StackTarget::BC => self.registers.get_bc(),
-                    StackTarget::DE => self.registers.get_de(),
-                    StackTarget::HL => self.registers.get_hl(),
-                    StackTarget::AF => self.registers.get_af(),
-                };
-                self.PUSH(value);
-                self.pc.wrapping_add(1)
-            }
             Instruction::POP(target) => {
                 let value = self.POP();
                 match target {
@@ -202,452 +224,89 @@ impl CPU {
                 }
                 self.pc.wrapping_add(1)
             }
-            Instruction::ADD(target) => {
-                match target {
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        let _new_value = self.ADD(value);
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        let _new_value = self.ADD(value);
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        let _new_value = self.ADD(value);
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        let _new_value = self.ADD(value);
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        let _new_value = self.ADD(value);
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        let _new_value = self.ADD(value);
-                    }
-                    ArithmeticTarget::HL => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let _new_value = self.ADD(value);
-                    }
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let _new_value = self.ADD(value);
-                    }
-                    ArithmeticTarget::N8 => {
-                        let value = self.get_immediate_byte();
-                        let _new_value = self.ADD(value);
-                    }
-                    _ => panic!("Incompatible ArithmeticTarget for ADD"),
-                }
+            Instruction::PUSH(target) => {
+                let value = match target {
+                    StackTarget::BC => self.registers.get_bc(),
+                    StackTarget::DE => self.registers.get_de(),
+                    StackTarget::HL => self.registers.get_hl(),
+                    StackTarget::AF => self.registers.get_af(),
+                };
+                self.PUSH(value);
                 self.pc.wrapping_add(1)
             }
-
-            Instruction::ADDHL(target) => {
-                match target {
-                    ArithmeticTarget::BC => {
-                        let value = self.registers.get_bc();
-                        let _new_value = self.ADDHL(value);
-                    }
-                    ArithmeticTarget::DE => {
-                        let value = self.registers.get_de();
-                        let _new_value = self.ADDHL(value);
-                    }
-                    ArithmeticTarget::HL => {
-                        let value = self.registers.get_hl();
-                        let _new_value = self.ADDHL(value);
-                    }
-                    ArithmeticTarget::SP => {
-                        let value = self.sp;
-                        let _new_value = self.ADDHL(value);
-                    }
-                    _ => panic!("Incompatible ArithmeticTarget for ADDHL"),
-                }
-                self.pc.wrapping_add(1)
-            }
-            Instruction::ADC(target) => {
-                match target {
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        let _new_value = self.ADC(value);
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        let _new_value = self.ADC(value);
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        let _new_value = self.ADC(value);
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        let _new_value = self.ADC(value);
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        let _new_value = self.ADC(value);
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        let _new_value = self.ADC(value);
-                    }
-                    ArithmeticTarget::HL => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let _new_value = self.ADC(value);
-                    }
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let _new_value = self.ADC(value);
-                    }
-                    ArithmeticTarget::N8 => {
-                        let value = self.get_immediate_byte();
-                        let _new_value = self.ADC(value);
-                    }
-                    _ => panic!("Incompatible ArithmeticTarget for ADC"),
-                }
-                self.pc.wrapping_add(1)
-            }
-            Instruction::SUB(target) => {
-                match target {
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        let _new_value = self.SUB(value);
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        let _new_value = self.SUB(value);
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        let _new_value = self.SUB(value);
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        let _new_value = self.SUB(value);
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        let _new_value = self.SUB(value);
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        let _new_value = self.SUB(value);
-                    }
-                    ArithmeticTarget::HL => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let _new_value = self.SUB(value);
-                    }
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let _new_value = self.SUB(value);
-                    }
-                    ArithmeticTarget::N8 => {
-                        let value = self.get_immediate_byte();
-                        let _new_value = self.SUB(value);
-                    }
-                    _ => panic!("Incompatible ArithmeticTarget for SUB"),
-                }
-                self.pc.wrapping_add(1)
-            }
-            Instruction::SBC(target) => {
-                match target {
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        let _new_value = self.SBC(value);
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        let _new_value = self.SBC(value);
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        let _new_value = self.SBC(value);
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        let _new_value = self.SBC(value);
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        let _new_value = self.SBC(value);
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        let _new_value = self.SBC(value);
-                    }
-                    ArithmeticTarget::HL => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let _new_value = self.SBC(value);
-                    }
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let _new_value = self.SBC(value);
-                    }
-                    ArithmeticTarget::N8 => {
-                        let value = self.get_immediate_byte();
-                        let _new_value = self.SBC(value);
-                    }
-                    _ => panic!("Incompatible ArithmeticTarget for SBC"),
-                }
-                self.pc.wrapping_add(1)
-            }
-            Instruction::AND(target) => {
-                match target {
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        let _new_value = self.AND(value);
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        let _new_value = self.AND(value);
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        let _new_value = self.AND(value);
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        let _new_value = self.AND(value);
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        let _new_value = self.AND(value);
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        let _new_value = self.AND(value);
-                    }
-                    ArithmeticTarget::HL => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let _new_value = self.AND(value);
-                    }
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let _new_value = self.AND(value);
-                    }
-                    ArithmeticTarget::N8 => {
-                        let value = self.get_immediate_byte();
-                        let _new_value = self.AND(value);
-                    }
-                    _ => panic!("Incompatible ArithmeticTarget for AND"),
-                }
-                self.pc.wrapping_add(1)
-            }
-            Instruction::OR(target) => {
-                match target {
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        let _new_value = self.OR(value);
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        let _new_value = self.OR(value);
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        let _new_value = self.OR(value);
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        let _new_value = self.OR(value);
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        let _new_value = self.OR(value);
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        let _new_value = self.OR(value);
-                    }
-                    ArithmeticTarget::HL => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let _new_value = self.OR(value);
-                    }
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let _new_value = self.OR(value);
-                    }
-                    ArithmeticTarget::N8 => {
-                        let value = self.get_immediate_byte();
-                        let _new_value = self.OR(value);
-                    }
-                    _ => panic!("Incompatible ArithmeticTarget for OR"),
-                }
-                self.pc.wrapping_add(1)
-            }
-            Instruction::XOR(target) => {
-                match target {
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        let _new_value = self.XOR(value);
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        let _new_value = self.XOR(value);
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        let _new_value = self.XOR(value);
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        let _new_value = self.XOR(value);
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        let _new_value = self.XOR(value);
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        let _new_value = self.XOR(value);
-                    }
-                    ArithmeticTarget::HL => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let _new_value = self.XOR(value);
-                    }
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let _new_value = self.XOR(value);
-                    }
-                    ArithmeticTarget::N8 => {
-                        let value = self.get_immediate_byte();
-                        let _new_value = self.XOR(value);
-                    }
-                    _ => panic!("Incompatible ArithmeticTarget for XOR"),
-                }
-                self.pc.wrapping_add(1)
-            }
-            Instruction::CP(target) => {
-                match target {
-                    ArithmeticTarget::B => {
-                        let value = self.registers.b;
-                        self.CP(value);
-                    }
-                    ArithmeticTarget::C => {
-                        let value = self.registers.c;
-                        self.CP(value);
-                    }
-                    ArithmeticTarget::D => {
-                        let value = self.registers.d;
-                        self.CP(value);
-                    }
-                    ArithmeticTarget::E => {
-                        let value = self.registers.e;
-                        self.CP(value);
-                    }
-                    ArithmeticTarget::H => {
-                        let value = self.registers.h;
-                        self.CP(value);
-                    }
-                    ArithmeticTarget::L => {
-                        let value = self.registers.l;
-                        self.CP(value);
-                    }
-                    ArithmeticTarget::HL => {
-                        let value = self.bus.read_byte(self.registers.get_hl());
-                        let _new_value = self.CP(value);
-                    }
-                    ArithmeticTarget::A => {
-                        let value = self.registers.a;
-                        let _new_value = self.CP(value);
-                    }
-                    ArithmeticTarget::N8 => {
-                        let value = self.get_immediate_byte();
-                        let _new_value = self.CP(value);
-                    }
-                    _ => panic!("Incompatible ArithmeticTarget for CP"),
-                }
-                self.pc.wrapping_add(1)
-            }
+            // INC and DEC affect same regs as prefixed instructions
             Instruction::INC(target) => {
-                match target {
-                    ArithmeticTarget::B => {
-                        self.registers.b = self.INC(self.registers.b);
-                    }
-                    ArithmeticTarget::C => {
-                        self.registers.c = self.INC(self.registers.c);
-                    }
-                    ArithmeticTarget::D => {
-                        self.registers.d = self.INC(self.registers.d);
-                    }
-                    ArithmeticTarget::E => {
-                        self.registers.e = self.INC(self.registers.e);
-                    }
-                    ArithmeticTarget::H => {
-                        self.registers.h = self.INC(self.registers.h);
-                    }
-                    ArithmeticTarget::L => {
-                        self.registers.l = self.INC(self.registers.l);
-                    }
-                    ArithmeticTarget::HL => {
-                        let hl = self.registers.get_hl();
-                        let value = self.bus.read_byte(hl);
-                        let new_value = self.INC(value);
-                        self.bus.write_byte(hl, new_value);
-                    }
-                    ArithmeticTarget::A => {
-                        self.registers.a = self.INC(self.registers.a);
-                    }
-                    _ => panic!("Incompatible ArithmeticTarget for INC"),
-                }
+                let r = self.read_prefixed_target(target);
+                let new_r = self.INC(r);
+                self.write_prefixed_target(target, new_r);
                 self.pc.wrapping_add(1)
             }
             Instruction::DEC(target) => {
-                match target {
-                    ArithmeticTarget::B => {
-                        self.registers.b = self.DEC(self.registers.b);
-                    }
-                    ArithmeticTarget::C => {
-                        self.registers.c = self.DEC(self.registers.c);
-                    }
-                    ArithmeticTarget::D => {
-                        self.registers.d = self.DEC(self.registers.d);
-                    }
-                    ArithmeticTarget::E => {
-                        self.registers.e = self.DEC(self.registers.e);
-                    }
-                    ArithmeticTarget::H => {
-                        self.registers.h = self.DEC(self.registers.h);
-                    }
-                    ArithmeticTarget::L => {
-                        self.registers.l = self.DEC(self.registers.l);
-                    }
-                    ArithmeticTarget::HL => {
-                        let hl = self.registers.get_hl();
-                        let value = self.bus.read_byte(hl);
-                        let new_value = self.DEC(value);
-                        self.bus.write_byte(hl, new_value);
-                    }
-                    ArithmeticTarget::A => {
-                        self.registers.a = self.DEC(self.registers.a);
-                    }
-                    _ => panic!("Incompatible ArithmeticTarget for DEC"),
-                }
+                let r = self.read_prefixed_target(target);
+                let new_r = self.DEC(r);
+                self.write_prefixed_target(target, new_r);
                 self.pc.wrapping_add(1)
             }
             // Same as INC and DEC but for 16 bit regs and doesn't touch any flags
             Instruction::INC16(target) => {
-                match target {
-                    ArithmeticTarget::BC => self.registers.set_bc(self.registers.get_bc().wrapping_add(1)),
-                    ArithmeticTarget::DE => self.registers.set_de(self.registers.get_de().wrapping_add(1)),
-                    ArithmeticTarget::HL => self.registers.set_hl(self.registers.get_hl().wrapping_add(1)),
-                    ArithmeticTarget::SP => self.sp = self.sp.wrapping_add(1),
-                    _ => panic!("Incompatible ArithmeticTarget for INC16"),
-                }
+                let r = self.read_arithmetic_word_target(target);
+                let new_r = r.wrapping_add(1);
+                self.write_arithmetic_word_target(target, new_r);
                 self.pc.wrapping_add(1)
             }
             Instruction::DEC16(target) => {
-                match target {
-                    ArithmeticTarget::BC => self.registers.set_bc(self.registers.get_bc().wrapping_sub(1)),
-                    ArithmeticTarget::DE => self.registers.set_de(self.registers.get_de().wrapping_sub(1)),
-                    ArithmeticTarget::HL => self.registers.set_hl(self.registers.get_hl().wrapping_sub(1)),
-                    ArithmeticTarget::SP => self.sp = self.sp.wrapping_sub(1),
-                    _ => panic!("Incompatible ArithmeticTarget for DEC16"),
-                }
+                let r = self.read_arithmetic_word_target(target);
+                let new_r = r.wrapping_sub(1);
+                self.write_arithmetic_word_target(target, new_r);
                 self.pc.wrapping_add(1)
             }
+
+            Instruction::ADDHL(target) => {
+                let value = self.read_arithmetic_word_target(target);
+                let _new_value = self.ADDHL(value);
+                self.pc.wrapping_add(1)
+            }
+            Instruction::ADD(target) => {
+                let value = self.read_arithmetic_byte_target(target);
+                let _new_value = self.ADD(value);
+                self.pc.wrapping_add(1)
+            }
+            Instruction::ADC(target) => {
+                let value = self.read_arithmetic_byte_target(target);
+                let _new_value = self.ADC(value);
+                self.pc.wrapping_add(1)
+            }
+            Instruction::SUB(target) => {
+                let value = self.read_arithmetic_byte_target(target);
+                let _new_value = self.SUB(value);
+                self.pc.wrapping_add(1)
+            }
+            Instruction::SBC(target) => {
+                let value = self.read_arithmetic_byte_target(target);
+                let _new_value = self.SBC(value);
+                self.pc.wrapping_add(1)
+            }
+            Instruction::AND(target) => {
+                let value = self.read_arithmetic_byte_target(target);
+                let _new_value = self.AND(value);
+                self.pc.wrapping_add(1)
+            }
+            Instruction::OR(target) => {
+                let value = self.read_arithmetic_byte_target(target);
+                let _new_value = self.OR(value);
+                self.pc.wrapping_add(1)
+            }
+            Instruction::XOR(target) => {
+                let value = self.read_arithmetic_byte_target(target);
+                let _new_value = self.XOR(value);
+                self.pc.wrapping_add(1)
+            }
+            Instruction::CP(target) => {
+                let value = self.read_arithmetic_byte_target(target);
+                let _new_value = self.CP(value);
+                self.pc.wrapping_add(1)
+            }
+            
             Instruction::RLCA() => {
                 self.RLCA();
                 self.pc.wrapping_add(1)
@@ -680,68 +339,68 @@ impl CPU {
 
             // PREFIXED INSTRUCTIONS
             Instruction::RLC(target) => {
-                let r = self.read_prefixed_register(target);
+                let r = self.read_prefixed_target(target);
                 let new_r = self.RLC(r);
-                self.write_prefixed_register(target, new_r);
+                self.write_prefixed_target(target, new_r);
                 self.pc.wrapping_add(2)
             }
             Instruction::RRC(target) => {
-                let r = self.read_prefixed_register(target);
+                let r = self.read_prefixed_target(target);
                 let new_r = self.RRC(r);
-                self.write_prefixed_register(target, new_r);
+                self.write_prefixed_target(target, new_r);
                 self.pc.wrapping_add(2)
             }
             Instruction::RL(target) => {
-                let r = self.read_prefixed_register(target);
+                let r = self.read_prefixed_target(target);
                 let new_r = self.RL(r);
-                self.write_prefixed_register(target, new_r);
+                self.write_prefixed_target(target, new_r);
                 self.pc.wrapping_add(2)
             }
             Instruction::RR(target) => {
-                let r = self.read_prefixed_register(target);
+                let r = self.read_prefixed_target(target);
                 let new_r = self.RR(r);
-                self.write_prefixed_register(target, new_r);
+                self.write_prefixed_target(target, new_r);
                 self.pc.wrapping_add(2)
             }
             Instruction::SLA(target) => {
-                let r = self.read_prefixed_register(target);
+                let r = self.read_prefixed_target(target);
                 let new_r = self.SLA(r);
-                self.write_prefixed_register(target, new_r);
+                self.write_prefixed_target(target, new_r);
                 self.pc.wrapping_add(2)
             }
             Instruction::SRA(target) => {
-                let r = self.read_prefixed_register(target);
+                let r = self.read_prefixed_target(target);
                 let new_r = self.SRA(r);
-                self.write_prefixed_register(target, new_r);
+                self.write_prefixed_target(target, new_r);
                 self.pc.wrapping_add(2)
             }
             Instruction::SWAP(target) => {
-                let r = self.read_prefixed_register(target);
+                let r = self.read_prefixed_target(target);
                 let new_r = self.SWAP(r);
-                self.write_prefixed_register(target, new_r);
+                self.write_prefixed_target(target, new_r);
                 self.pc.wrapping_add(2)
             }
             Instruction::SRL(target) => {
-                let r = self.read_prefixed_register(target);
+                let r = self.read_prefixed_target(target);
                 let new_r = self.SRL(r);
-                self.write_prefixed_register(target, new_r);
+                self.write_prefixed_target(target, new_r);
                 self.pc.wrapping_add(2)
             }
             Instruction::BIT(bit, target) => {
-                let r = self.read_prefixed_register(target);
+                let r = self.read_prefixed_target(target);
                 self.BIT(bit, r);
                 self.pc.wrapping_add(2)
             }
             Instruction::RES(bit, target) => {
-                let r = self.read_prefixed_register(target);
+                let r = self.read_prefixed_target(target);
                 let new_r = self.RES(bit, r);
-                self.write_prefixed_register(target, new_r);
+                self.write_prefixed_target(target, new_r);
                 self.pc.wrapping_add(2)
             }
             Instruction::SET(bit, target) => {
-                let r = self.read_prefixed_register(target);
+                let r = self.read_prefixed_target(target);
                 let new_r = self.SET(bit, r);
-                self.write_prefixed_register(target, new_r);
+                self.write_prefixed_target(target, new_r);
                 self.pc.wrapping_add(2)
             }
             // _ => panic!("Unknown instruction (exited execute)"),
@@ -762,25 +421,33 @@ impl CPU {
         }
         else { self.pc.wrapping_add(2) }
     }
-    // decrement stack pointer and push value from 16 bit reg
-    fn PUSH(&mut self, value: u16) {
-        self.sp = self.sp.wrapping_sub(2);
-        self.bus.write_word(self.sp, value);
-    }
     // return u16 at current stack pointer (to be stored in 16 bit reg) and increment it
     fn POP(&mut self) -> u16 {
         let result = self.bus.read_word(self.sp);
         self.sp = self.sp.wrapping_add(2);
         result
     }
-    fn ADD(&mut self, value: u8) -> u8 {
-        let (new_value, did_overflow) = self.registers.a.overflowing_add(value);
+    // decrement stack pointer and push value from 16 bit reg
+    fn PUSH(&mut self, value: u16) {
+        self.sp = self.sp.wrapping_sub(2);
+        self.bus.write_word(self.sp, value);
+    }
+    // increment input register
+    fn INC(&mut self, value: u8) -> u8 {
+        let new_value = value.wrapping_add(1);
         self.registers.f.zero = new_value == 0;
         self.registers.f.subtract = false;
-        // set half carry based on if lower nibbles added overflows to upper nibble
-        self.registers.f.half_carry = (self.registers.a & 0xF) + (value & 0xF) > 0xF;
-        self.registers.f.carry = did_overflow;
-        self.registers.a = new_value;
+        self.registers.f.half_carry = (value & 0xF) == 0xF;
+        // don't touch carry flag in INC or DEC
+        new_value
+    }
+    // decrement input register
+    fn DEC(&mut self, value: u8) -> u8 {
+        let new_value = value.wrapping_sub(1);
+        self.registers.f.zero = new_value == 0;
+        self.registers.f.subtract = true;
+        self.registers.f.half_carry = (value & 0xF) == 0;
+        // don't touch carry flag in INC or DEC
         new_value
     }
     // like ADD except the target is added to the HL reg and it's 16 bit based
@@ -793,6 +460,16 @@ impl CPU {
         self.registers.f.half_carry = (hl & 0xFFF) + (value & 0xFFF) > 0xFFF;
         self.registers.f.carry = did_overflow;
         self.registers.set_hl(new_value);
+        new_value
+    }
+    fn ADD(&mut self, value: u8) -> u8 {
+        let (new_value, did_overflow) = self.registers.a.overflowing_add(value);
+        self.registers.f.zero = new_value == 0;
+        self.registers.f.subtract = false;
+        // set half carry based on if lower nibbles added overflows to upper nibble
+        self.registers.f.half_carry = (self.registers.a & 0xF) + (value & 0xF) > 0xF;
+        self.registers.f.carry = did_overflow;
+        self.registers.a = new_value;
         new_value
     }
     // like ADD except the value of carry flag is also added to the number (as 0b1)
@@ -867,24 +544,6 @@ impl CPU {
         self.registers.f.subtract = true;
         self.registers.f.half_carry = (self.registers.a & 0xF) < (value & 0xF);
         self.registers.f.carry = did_overflow;
-    }
-    // increment input register
-    fn INC(&mut self, value: u8) -> u8 {
-        let new_value = value.wrapping_add(1);
-        self.registers.f.zero = new_value == 0;
-        self.registers.f.subtract = false;
-        self.registers.f.half_carry = (value & 0xF) == 0xF;
-        // don't touch carry flag in INC or DEC
-        new_value
-    }
-    // decrement input register
-    fn DEC(&mut self, value: u8) -> u8 {
-        let new_value = value.wrapping_sub(1);
-        self.registers.f.zero = new_value == 0;
-        self.registers.f.subtract = true;
-        self.registers.f.half_carry = (value & 0xF) == 0;
-        // don't touch carry flag in INC or DEC
-        new_value
     }
     // rotate A left without carry (carry set to old msb)
     fn RLCA(&mut self) {
