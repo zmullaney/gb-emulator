@@ -59,6 +59,31 @@ impl CPU {
         self.pc = self.pc.wrapping_add(2);
         value
     }
+    fn read_prefixed_register(&mut self, target: PrefixedTarget) -> u8 {
+        let r = match target {
+            PrefixedTarget::B => self.registers.b,
+            PrefixedTarget::C => self.registers.c,
+            PrefixedTarget::D => self.registers.d,
+            PrefixedTarget::E => self.registers.e,
+            PrefixedTarget::H => self.registers.h,
+            PrefixedTarget::L => self.registers.l,
+            PrefixedTarget::HL => self.bus.read_byte(self.registers.get_hl()),
+            PrefixedTarget::A => self.registers.a,
+        };
+        r
+    }
+    fn write_prefixed_register(&mut self, target: PrefixedTarget, new_r: u8) {
+        match target {
+            PrefixedTarget::B => self.registers.b = new_r,
+            PrefixedTarget::C => self.registers.c = new_r,
+            PrefixedTarget::D => self.registers.d = new_r,
+            PrefixedTarget::E => self.registers.e = new_r,
+            PrefixedTarget::H => self.registers.h = new_r,
+            PrefixedTarget::L => self.registers.l = new_r,
+            PrefixedTarget::HL => self.bus.write_byte(self.registers.get_hl(), new_r),
+            PrefixedTarget::A => self.registers.a = new_r,
+        }
+    }
 
     fn execute(&mut self, instruction: Instruction) -> u16 {
         match instruction {
@@ -651,121 +676,74 @@ impl CPU {
                 self.CCF();
                 self.pc.wrapping_add(1)
             }
+            // TODO: support for more instructions
 
             // PREFIXED INSTRUCTIONS
+            Instruction::RLC(target) => {
+                let r = self.read_prefixed_register(target);
+                let new_r = self.RLC(r);
+                self.write_prefixed_register(target, new_r);
+                self.pc.wrapping_add(2)
+            }
+            Instruction::RRC(target) => {
+                let r = self.read_prefixed_register(target);
+                let new_r = self.RRC(r);
+                self.write_prefixed_register(target, new_r);
+                self.pc.wrapping_add(2)
+            }
+            Instruction::RL(target) => {
+                let r = self.read_prefixed_register(target);
+                let new_r = self.RL(r);
+                self.write_prefixed_register(target, new_r);
+                self.pc.wrapping_add(2)
+            }
+            Instruction::RR(target) => {
+                let r = self.read_prefixed_register(target);
+                let new_r = self.RR(r);
+                self.write_prefixed_register(target, new_r);
+                self.pc.wrapping_add(2)
+            }
+            Instruction::SLA(target) => {
+                let r = self.read_prefixed_register(target);
+                let new_r = self.SLA(r);
+                self.write_prefixed_register(target, new_r);
+                self.pc.wrapping_add(2)
+            }
+            Instruction::SRA(target) => {
+                let r = self.read_prefixed_register(target);
+                let new_r = self.SRA(r);
+                self.write_prefixed_register(target, new_r);
+                self.pc.wrapping_add(2)
+            }
+            Instruction::SWAP(target) => {
+                let r = self.read_prefixed_register(target);
+                let new_r = self.SWAP(r);
+                self.write_prefixed_register(target, new_r);
+                self.pc.wrapping_add(2)
+            }
+            Instruction::SRL(target) => {
+                let r = self.read_prefixed_register(target);
+                let new_r = self.SRL(r);
+                self.write_prefixed_register(target, new_r);
+                self.pc.wrapping_add(2)
+            }
             Instruction::BIT(bit, target) => {
-                match target {
-                    ArithmeticTarget::B => self.BIT(bit, self.registers.b),
-                    ArithmeticTarget::C => self.BIT(bit, self.registers.c),
-                    ArithmeticTarget::D => self.BIT(bit, self.registers.d),
-                    ArithmeticTarget::E => self.BIT(bit, self.registers.e),
-                    ArithmeticTarget::H => self.BIT(bit, self.registers.h),
-                    ArithmeticTarget::L => self.BIT(bit, self.registers.l),
-                    ArithmeticTarget::HL => {
-                        let hl = self.registers.get_hl();
-                        let r = self.bus.read_byte(hl);
-                        self.BIT(bit, r);
-                    }
-                    ArithmeticTarget::A => self.BIT(bit, self.registers.a),
-                    _ => panic!("Incompatible ArithmeticTarget for BIT"),
-                }
+                let r = self.read_prefixed_register(target);
+                self.BIT(bit, r);
                 self.pc.wrapping_add(2)
             }
             Instruction::RES(bit, target) => {
-                match target {
-                    ArithmeticTarget::B => {
-                        let r = self.registers.b;
-                        let new_r = self.RES(bit, r);
-                        self.registers.b = new_r;
-                    }
-                    ArithmeticTarget::C => {
-                        let r = self.registers.c;
-                        let new_r = self.RES(bit, r);
-                        self.registers.c = new_r;
-                    }
-                    ArithmeticTarget::D => {
-                        let r = self.registers.d;
-                        let new_r = self.RES(bit, r);
-                        self.registers.d = new_r;
-                    }
-                    ArithmeticTarget::E => {
-                        let r = self.registers.e;
-                        let new_r = self.RES(bit, r);
-                        self.registers.e = new_r;
-                    }
-                    ArithmeticTarget::H => {
-                        let r = self.registers.h;
-                        let new_r = self.RES(bit, r);
-                        self.registers.h = new_r;
-                    }
-                    ArithmeticTarget::L => {
-                        let r = self.registers.l;
-                        let new_r = self.RES(bit, r);
-                        self.registers.l = new_r;
-                    }
-                    ArithmeticTarget::HL => {
-                        let hl = self.registers.get_hl();
-                        let r = self.bus.read_byte(hl);
-                        let new_r = self.RES(bit, r);
-                        self.bus.write_byte(hl, new_r);
-                    }
-                    ArithmeticTarget::A => {
-                        let r = self.registers.a;
-                        let new_r = self.RES(bit, r);
-                        self.registers.a = new_r;
-                    }
-                    _ => panic!("Incompatible ArithmeticTarget for RES"),
-                }
+                let r = self.read_prefixed_register(target);
+                let new_r = self.RES(bit, r);
+                self.write_prefixed_register(target, new_r);
                 self.pc.wrapping_add(2)
             }
             Instruction::SET(bit, target) => {
-                match target {
-                    ArithmeticTarget::B => {
-                        let r = self.registers.b;
-                        let new_r = self.SET(bit, r);
-                        self.registers.b = new_r;
-                    }
-                    ArithmeticTarget::C => {
-                        let r = self.registers.c;
-                        let new_r = self.SET(bit, r);
-                        self.registers.c = new_r;
-                    }
-                    ArithmeticTarget::D => {
-                        let r = self.registers.d;
-                        let new_r = self.SET(bit, r);
-                        self.registers.d = new_r;
-                    }
-                    ArithmeticTarget::E => {
-                        let r = self.registers.e;
-                        let new_r = self.SET(bit, r);
-                        self.registers.e = new_r;
-                    }
-                    ArithmeticTarget::H => {
-                        let r = self.registers.h;
-                        let new_r = self.SET(bit, r);
-                        self.registers.h = new_r;
-                    }
-                    ArithmeticTarget::L => {
-                        let r = self.registers.l;
-                        let new_r = self.SET(bit, r);
-                        self.registers.l = new_r;
-                    }
-                    ArithmeticTarget::HL => {
-                        let hl = self.registers.get_hl();
-                        let r = self.bus.read_byte(hl);
-                        let new_r = self.SET(bit, r);
-                        self.bus.write_byte(hl, new_r);
-                    }
-                    ArithmeticTarget::A => {
-                        let r = self.registers.a;
-                        let new_r = self.SET(bit, r);
-                        self.registers.a = new_r;
-                    }
-                    _ => panic!("Incompatible ArithmeticTarget for SET"),
-                }
+                let r = self.read_prefixed_register(target);
+                let new_r = self.SET(bit, r);
+                self.write_prefixed_register(target, new_r);
                 self.pc.wrapping_add(2)
             }
-            // TODO: support for more instructions
             // _ => panic!("Unknown instruction (exited execute)"),
         }
     }
@@ -919,7 +897,7 @@ impl CPU {
         self.registers.f.half_carry = false;
         self.registers.a = new_value;
     }
-    // rotate A reg right without carry (carry set to old lsb)
+    // rotate A right without carry (carry set to old lsb)
     fn RRCA(&mut self) {
         let old_a = self.registers.a;
         let old_lsb = if old_a & 0x01 != 0 { 0x80 } else { 0 };
@@ -936,11 +914,11 @@ impl CPU {
         let carry_in = if self.registers.f.carry { 0x01 } else { 0 };
         // A shifts left then carry_in becomes lsb of A
         let new_value = (old_a << 1) | carry_in;
-        // set new carry to msb of A
-        self.registers.f.carry = old_a & 0x80 != 0;
         // don't touch zero flag
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
+        // set new carry to msb of A
+        self.registers.f.carry = old_a & 0x80 != 0;
         self.registers.a = new_value;
     }
     // rotate A register right using carry flag
@@ -949,11 +927,11 @@ impl CPU {
         let carry_in = if self.registers.f.carry { 0x80 } else { 0 };
         // A shifts right then carry_in becomes msb of A
         let new_value = (old_a >> 1) | carry_in;
-        // set new carry to lsb of A
-        self.registers.f.carry = old_a & 0x1 != 0;
         // don't touch zero flag
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
+        // set new carry to lsb of A
+        self.registers.f.carry = old_a & 0x1 != 0;
         self.registers.a = new_value;
     }
     // toggle every bit in A
@@ -977,6 +955,87 @@ impl CPU {
         // don't touch zero flag
         self.registers.f.subtract = false;
         self.registers.f.half_carry = false;
+    }
+
+    // PREFIXED INSTRUCTIONS
+    // rotate r left without carry (carry set to old msb)
+    fn RLC(&mut self, r: u8) -> u8 {
+        let old_msb = if r & 0x80 != 0 { 0x01 } else { 0 };
+        let new_r = (r << 1) | old_msb;
+        self.registers.f.zero = new_r == 0;
+        self.registers.f.subtract = false;
+        self.registers.f.half_carry = false;
+        self.registers.f.carry = old_msb != 0;
+        new_r
+    }
+    // rotate r right without carry (carry set to old lsb)
+    fn RRC(&mut self, r: u8) -> u8 {
+        let old_lsb = if r & 0x01 != 0 { 0x80 } else { 0 };
+        let new_r = (r >> 1) | old_lsb;
+        self.registers.f.zero = new_r == 0;
+        self.registers.f.subtract = false;
+        self.registers.f.half_carry = false;
+        self.registers.f.carry = old_lsb != 0;
+        new_r
+    }
+    // rotate r left through carry flag
+    fn RL(&mut self, r: u8) -> u8 {
+        let carry_in = if self.registers.f.carry { 0x01 } else { 0 };
+        let new_r = (r << 1) | carry_in;
+        self.registers.f.zero = new_r == 0;
+        self.registers.f.subtract = false;
+        self.registers.f.half_carry = false;
+        self.registers.f.carry = r & 0x80 != 0;
+        new_r
+    }
+    // rotate r right through carry flag
+    fn RR(&mut self, r: u8) -> u8 {
+        let carry_in = if self.registers.f.carry { 0x80 } else { 0 };
+        let new_r = (r >> 1) | carry_in;
+        self.registers.f.zero = new_r == 0;
+        self.registers.f.subtract = false;
+        self.registers.f.half_carry = false;
+        self.registers.f.carry = r & 0x01 != 0;
+        new_r
+    }
+    // make bit 7 carry and shift left
+    fn SLA(&mut self, r: u8) -> u8 {
+        let new_r = r << 1;
+        self.registers.f.zero = new_r == 0;
+        self.registers.f.subtract = false;
+        self.registers.f.half_carry = false;
+        self.registers.f.carry = r & 0x80 != 0;
+        new_r
+    }
+    // make bit 0 carry and shift right while preserving bit 7
+    fn SRA(&mut self, r: u8) -> u8 {
+        let old_msb = r & 0x80;
+        let new_r = (r >> 1) | old_msb;
+        self.registers.f.zero = new_r == 0;
+        self.registers.f.subtract = false;
+        self.registers.f.half_carry = false;
+        self.registers.f.carry = r & 0x01 != 0;
+        new_r
+    }
+    // swap upper and lower nibble of r
+    fn SWAP(&mut self, r: u8) -> u8 {
+        let lower_nibble = (r & 0x0F) << 4;
+        let upper_nibble = (r & 0xF0) >> 4;
+        let new_r = lower_nibble | upper_nibble;
+        self.registers.f.zero = new_r == 0;
+        self.registers.f.subtract = false;
+        self.registers.f.half_carry = false;
+        self.registers.f.carry = false;
+        new_r
+    }
+    // make bit 0 carry and shift right
+    fn SRL(&mut self, r: u8) -> u8 {
+        let new_r = r >> 1;
+        self.registers.f.zero = new_r == 0;
+        self.registers.f.subtract = false;
+        self.registers.f.half_carry = false;
+        self.registers.f.carry = r & 0x01 != 0;
+        new_r
     }
     // test whether bit in question is set
     fn BIT(&mut self, bit: u8, r: u8) {
