@@ -1,22 +1,38 @@
 use crate::registers::Registers;
 use crate::instructions::*;
+use crate::gpu::*;
 
 struct MemoryBus {
-    memory: [u8; 0xFFFF]
+    memory: [u8; 0xFFFF],
+    gpu: GPU,
 }
 
 impl MemoryBus {
-    fn read_byte(&mut self, address: u16) -> u8 {
-        self.memory[address as usize]
+    fn read_byte(&self, address: u16) -> u8 {
+        let address = address as usize;
+        match address {
+            VRAM_BEGIN..=VRAM_END => {
+                self.gpu.read_vram(address - VRAM_BEGIN)
+            }
+            _ => self.memory[address],
+        }
+        // TODO: support other areas of memory
     }
     // pass in address to first byte of u16
-    fn read_word(&mut self, address: u16) -> u16 {
+    fn read_word(&self, address: u16) -> u16 {
         let least_significant_byte = self.read_byte(address) as u16;
         let most_significant_byte = self.read_byte(address.wrapping_add(1)) as u16;
         (most_significant_byte << 8) | least_significant_byte
     }
     fn write_byte(&mut self, address: u16, value: u8) {
-        self.memory[address as usize] = value;
+        let address = address as usize;
+        match address {
+            VRAM_BEGIN..=VRAM_END => {
+                self.gpu.write_vram(address - VRAM_BEGIN, value);
+            }
+            _ => self.memory[address] = value,
+        }
+        // TODO: support other areas of memory
     }
     fn write_word(&mut self, address: u16, value: u16) {
         let least_significant_byte = (value & 0xFF) as u8;
@@ -74,7 +90,7 @@ impl CPU {
         };
         value
     }
-    fn read_arithmetic_word_target(&mut self, target: ArithmeticWordTarget) -> u16 {
+    fn read_arithmetic_word_target(&self, target: ArithmeticWordTarget) -> u16 {
         let value = match target {
             ArithmeticWordTarget::BC => self.registers.get_bc(),
             ArithmeticWordTarget::DE => self.registers.get_de(),
@@ -91,7 +107,7 @@ impl CPU {
             ArithmeticWordTarget::SP => self.sp = value,
         }
     }
-    fn read_prefixed_target(&mut self, target: PrefixedTarget) -> u8 {
+    fn read_prefixed_target(&self, target: PrefixedTarget) -> u8 {
         let r = match target {
             PrefixedTarget::B => self.registers.b,
             PrefixedTarget::C => self.registers.c,
@@ -261,6 +277,7 @@ impl CPU {
                 self.pc.wrapping_add(1)
             }
 
+            // Arithmetic Instructions
             Instruction::ADDHL(target) => {
                 let value = self.read_arithmetic_word_target(target);
                 let _new_value = self.ADDHL(value);
@@ -306,7 +323,6 @@ impl CPU {
                 let _new_value = self.CP(value);
                 self.pc.wrapping_add(1)
             }
-            
             Instruction::RLCA() => {
                 self.RLCA();
                 self.pc.wrapping_add(1)
@@ -337,7 +353,7 @@ impl CPU {
             }
             // TODO: support for more instructions
 
-            // PREFIXED INSTRUCTIONS
+            // Prefixed Instructions
             Instruction::RLC(target) => {
                 let r = self.read_prefixed_target(target);
                 let new_r = self.RLC(r);
@@ -408,12 +424,12 @@ impl CPU {
     }
 
     // jump to 16 bit address stored after instruction
-    fn JP(&mut self, should_jump: bool) -> u16 {
+    fn JP(&self, should_jump: bool) -> u16 {
         if should_jump { self.bus.read_word(self.pc.wrapping_add(1)) }
         else { self.pc.wrapping_add(3) }
     }
     // jump based on i8 offset stored after instruction
-    fn JR(&mut self, should_jump: bool) -> u16 {
+    fn JR(&self, should_jump: bool) -> u16 {
         if should_jump {
             let offset = self.bus.read_byte(self.pc.wrapping_add(1)) as i8;
             // compiler demands i16 for wrapping_add_signed here
@@ -454,7 +470,7 @@ impl CPU {
     fn ADDHL(&mut self, value: u16) -> u16 {
         let hl = self.registers.get_hl();
         let (new_value, did_overflow) = hl.overflowing_add(value);
-        // self.registers.f.zero = new_value == 0;  <- don't touch in ADDHL
+        // don't touch zero flag
         self.registers.f.subtract = false;
         // check for uppermost nibble carry (bit 11 -> 12)
         self.registers.f.half_carry = (hl & 0xFFF) + (value & 0xFFF) > 0xFFF;
@@ -616,7 +632,7 @@ impl CPU {
         self.registers.f.half_carry = false;
     }
 
-    // PREFIXED INSTRUCTIONS
+    // Prefixed Instructions
     // rotate r left without carry (carry set to old msb)
     fn RLC(&mut self, r: u8) -> u8 {
         let old_msb = if r & 0x80 != 0 { 0x01 } else { 0 };
@@ -705,13 +721,13 @@ impl CPU {
         // don't touch carry flag
     }
     // reset bit in question to 0
-    fn RES(&mut self, bit: u8, r: u8) -> u8 {
+    fn RES(&self, bit: u8, r: u8) -> u8 {
         let new_r = r & !(1 << bit);
         // don't touch any flags
         new_r
     }
     // set bit in question to 1
-    fn SET(&mut self, bit: u8, r: u8) -> u8 {
+    fn SET(&self, bit: u8, r: u8) -> u8 {
         let new_r = r | (1 << bit);
         // don't touch any flags
         new_r
